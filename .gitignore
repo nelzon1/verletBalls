@@ -1,0 +1,8 @@
+lib/*
+SFML/*
+font/*
+bin/*
+.vscode/*
+build/*
+include/*
+*.code-workspace
