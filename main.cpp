@@ -40,15 +40,15 @@ int32_t main(int32_t, char*[])
     
 
     // Set simulation attributes
-    const float objects_spawn_delay = 0.025f;
+    const float objects_spawn_delay = 0.01f;
     const float objects_spawn_speed = 1200.0f;
     const sf::Vector2f objects_spawn_position = {500.0f, 200.0f};
     const float object_min_radius = 1.0f;
     const float object_max_radius = 20.0f;
-    const uint32_t max_objects_count  = 1000;
+    const uint32_t max_objects_count  = 2000;
     const float max_angle = 1.0f;
 
-    solver.initilaizeGrid(10, 10);
+    solver.initilaizeGrid(24);
 
     sf::Clock clock;
     sf::Clock frameClock;

@@ -2,6 +2,7 @@
 #include "SFML/Graphics.hpp"
 #include <vector>
 #include <cmath>
+#include <thread>
 #include "grid.hpp"
 
 #include "utils/math.hpp"
@@ -75,8 +76,10 @@ public:
         const float step_dt = getStepDt();
         for (uint32_t i{m_sub_steps}; i--;) {
             applyGravity();
-            if ( m_objects.size() < 200 ) checkCollisions(step_dt);
-            else checkCollisionsGrid(step_dt);
+            // if ( m_objects.size() < 200 ) checkCollisions(step_dt);
+            // else checkCollisionsGrid(step_dt);
+            //checkCollisionsGrid(step_dt);
+            checkCollisionsParallel(step_dt);
             applyConstraint();
             updateObjects(step_dt);
         }
@@ -103,8 +106,10 @@ public:
         object.setVelocity(v, getStepDt());
     }
 
-    void initilaizeGrid(uint32_t height, uint32_t width) {
-        grid = Grid(width, height);
+    void initilaizeGrid(uint32_t height) {
+        grid = Grid(height, height);
+        gridSize = height;
+        binWidth = 1000 / gridSize;
     }
 
     void clearGrid() {
@@ -119,9 +124,31 @@ public:
         clearGrid();
         for (uint32_t k = 0; k < m_objects.size(); ++k) {
             VerletObject& obj = m_objects[k];
-            uint32_t x_bin = obj.position.x / 100;
-            uint32_t y_bin = obj.position.y / 100;
+            uint32_t x_bin = obj.position.x / binWidth;
+            uint32_t y_bin = obj.position.y / binWidth;
             grid.getCell(x_bin,y_bin).addObject(k);
+        }
+    }
+
+    void checkCollisionsChunk(int16_t lower, int16_t upper) {
+        // Iterate over all squares except the outside boundary layer
+        for (int16_t x = lower; x < upper ; ++x) {
+            for (int16_t y = 0; y < gridSize ; ++y) {
+                Cell& cell_1 = grid.getCell(x,y);
+                // Check the adjacent squares
+                for (int16_t dx = -1; dx <= 1; ++dx)
+                {
+                    for (int16_t dy = -1; dy <= 1; ++dy)
+                    {
+                        //Check 2 cells against each other
+                        if ( x + dx < 0 || x + dx >= gridSize || y + dy < 0 || y + dy >= gridSize ) {
+                            continue;
+                        }
+                        Cell& cell_2 = grid.getCell(x + dx, y + dy);
+                        checkCollisionsBetweenCells(cell_1, cell_2);
+                    }
+                }
+            }
         }
     }
 
@@ -163,6 +190,9 @@ private:
     float m_frame_dt = 0.0f;
     Grid grid;
     const float response_coef = 0.75f;
+    uint32_t gridSize = 1;
+    uint32_t binWidth;
+    uint16_t threadCount = 12;
 
     void applyGravity()
     {
@@ -205,33 +235,36 @@ private:
     void checkCollisionsGrid(float dt) {
         assignObjectsToGrid();
         // Iterate over all squares except the outside boundary layer
-        for (uint16_t x = 1; x < grid.width - 1; ++x) {
-            for (uint16_t y = 1; y < grid.height - 1; ++y) {
+        for (int16_t x = 0; x < gridSize ; ++x) {
+            for (int16_t y = 0; y < gridSize ; ++y) {
                 Cell& cell_1 = grid.getCell(x,y);
                 // Check the adjacent squares
-                for (int dx = -1; dx <= 1; ++dx)
+                for (int16_t dx = -1; dx <= 1; ++dx)
                 {
-                    for (int dy = -1; dy <= 1; ++dy)
+                    for (int16_t dy = -1; dy <= 1; ++dy)
                     {
                         //Check 2 cells against each other
+                        if ( x + dx < 0 || x + dx >= gridSize || y + dy < 0 || y + dy >= gridSize ) {
+                            continue;
+                        }
                         Cell& cell_2 = grid.getCell(x + dx, y + dy);
                         checkCollisionsBetweenCells(cell_1, cell_2);
                     }
                 }
             }
         }
-        collideBoundaries();
+        //collideBoundaries();
     }
 
     void collideBoundaries() {
-        for (uint16_t x = 0; x < grid.width; x += grid.width - 1) {
+        for (uint16_t x = 0; x < gridSize; x += gridSize - 1) {
             for (uint16_t y = 0; y < grid.height; ++y) {
                 Cell& cell = grid.getCell(x,y);
                 checkCollisionsBetweenCells(cell, cell);
             }
         }
-        for (uint16_t y = 0; y < grid.height; y += grid.height - 1) {
-            for (uint16_t x = 0; x < grid.width; ++x) {
+        for (uint16_t y = 0; y < gridSize; y += gridSize - 1) {
+            for (uint16_t x = 0; x < gridSize; ++x) {
                  Cell& cell = grid.getCell(x,y);
                      checkCollisionsBetweenCells(cell, cell);
             }
@@ -249,6 +282,30 @@ private:
                     collide(m_objects[id_1], m_objects[id_2]);
                 }
             }
+        }
+    }
+
+    void checkCollisionsParallel(float dt) {
+        assignObjectsToGrid();
+        // Split up the grid into (N threads) * 2 boxes
+        uint16_t chunkSize = gridSize / threadCount / 2;
+        std::vector<std::thread> threads;
+
+        // Check the first half of the bins among threads
+        for (uint16_t i = 0; i < threadCount * 2; i += 2) {
+            threads.push_back(std::thread(&Solver::checkCollisionsChunk, this,  i * chunkSize, (i + 1) * chunkSize) );
+        }
+        for (auto &th : threads) {
+            th.join();
+        }
+
+        // Check the second half of the bins
+        threads.clear();
+        for (uint16_t i = 1; i < threadCount * 2; i += 2) {
+        threads.push_back(std::thread(&Solver::checkCollisionsChunk, this,  i * chunkSize, (i + 1) * chunkSize) );
+        }
+        for (auto &th : threads) {
+            th.join();
         }
     }
 
