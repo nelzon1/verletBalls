@@ -109,7 +109,7 @@ public:
     void initilaizeGrid(uint32_t height) {
         grid = Grid(height, height);
         gridSize = height;
-        binWidth = 1000 / gridSize;
+        binWidth = 1000.0f / static_cast<float>(gridSize);
     }
 
     void clearGrid() {
@@ -124,31 +124,9 @@ public:
         clearGrid();
         for (uint32_t k = 0; k < m_objects.size(); ++k) {
             VerletObject& obj = m_objects[k];
-            uint32_t x_bin = obj.position.x / binWidth;
-            uint32_t y_bin = obj.position.y / binWidth;
+            uint32_t x_bin = static_cast<uint32_t>(obj.position.x / binWidth);
+            uint32_t y_bin = static_cast<uint32_t>(obj.position.y / binWidth);
             grid.getCell(x_bin,y_bin).addObject(k);
-        }
-    }
-
-    void checkCollisionsChunk(int16_t lower, int16_t upper) {
-        // Iterate over all squares except the outside boundary layer
-        for (int16_t x = lower; x < upper ; ++x) {
-            for (int16_t y = 0; y < gridSize ; ++y) {
-                Cell& cell_1 = grid.getCell(x,y);
-                // Check the adjacent squares
-                for (int16_t dx = -1; dx <= 1; ++dx)
-                {
-                    for (int16_t dy = -1; dy <= 1; ++dy)
-                    {
-                        //Check 2 cells against each other
-                        if ( x + dx < 0 || x + dx >= gridSize || y + dy < 0 || y + dy >= gridSize ) {
-                            continue;
-                        }
-                        Cell& cell_2 = grid.getCell(x + dx, y + dy);
-                        checkCollisionsBetweenCells(cell_1, cell_2);
-                    }
-                }
-            }
         }
     }
 
@@ -191,7 +169,7 @@ private:
     Grid grid;
     const float response_coef = 0.75f;
     uint32_t gridSize = 1;
-    uint32_t binWidth;
+    float binWidth;
     uint16_t threadCount = 12;
 
     void applyGravity()
@@ -234,9 +212,10 @@ private:
 
     void checkCollisionsGrid(float dt) {
         assignObjectsToGrid();
+        int16_t gridLength = static_cast<int16_t>(gridSize);
         // Iterate over all squares except the outside boundary layer
-        for (int16_t x = 0; x < gridSize ; ++x) {
-            for (int16_t y = 0; y < gridSize ; ++y) {
+        for (int16_t x = 0; x < gridLength ; ++x) {
+            for (int16_t y = 0; y < gridLength ; ++y) {
                 Cell& cell_1 = grid.getCell(x,y);
                 // Check the adjacent squares
                 for (int16_t dx = -1; dx <= 1; ++dx)
@@ -244,7 +223,7 @@ private:
                     for (int16_t dy = -1; dy <= 1; ++dy)
                     {
                         //Check 2 cells against each other
-                        if ( x + dx < 0 || x + dx >= gridSize || y + dy < 0 || y + dy >= gridSize ) {
+                        if ( x + dx < 0 || x + dx >= gridLength || y + dy < 0 || y + dy >= gridLength ) {
                             continue;
                         }
                         Cell& cell_2 = grid.getCell(x + dx, y + dy);
@@ -306,6 +285,29 @@ private:
         }
         for (auto &th : threads) {
             th.join();
+        }
+    }
+
+    void checkCollisionsChunk(int16_t lower, int16_t upper) {
+        // Iterate over all squares except the outside boundary layer
+        int16_t gridLength = static_cast<int16_t>(gridSize);
+        for (int16_t x = lower; x < upper ; ++x) {
+            for (int16_t y = 0; y < gridLength ; ++y) {
+                Cell& cell_1 = grid.getCell(x,y);
+                // Check the adjacent squares
+                for (int16_t dx = -1; dx <= 1; ++dx)
+                {
+                    for (int16_t dy = -1; dy <= 1; ++dy)
+                    {
+                        //Check 2 cells against each other
+                        if ( x + dx < 0 || x + dx >= gridLength || y + dy < 0 || y + dy >= gridLength ) {
+                            continue;
+                        }
+                        Cell& cell_2 = grid.getCell(x + dx, y + dy);
+                        checkCollisionsBetweenCells(cell_1, cell_2);
+                    }
+                }
+            }
         }
     }
 

@@ -24,7 +24,7 @@ int32_t main(int32_t, char*[])
     constexpr int32_t window_height = 1000;
 
     sf::ContextSettings settings;
-    settings.antialiasingLevel = 1;
+    settings.antialiasingLevel = 3;
     sf::RenderWindow window(sf::VideoMode(window_width, window_height), "Verlet", sf::Style::Default, settings);
     const uint32_t frame_rate = 60;
     window.setFramerateLimit(frame_rate);
@@ -35,17 +35,17 @@ int32_t main(int32_t, char*[])
 
     // Solver configuration
     solver.setConstraint({static_cast<float>(window_width) * 0.5f, static_cast<float>(window_height) * 0.5f}, 450.0f);    
-    solver.setSubStepsCount(4);
+    solver.setSubStepsCount(8);
     solver.setSimulationUpdateRate(frame_rate);
     
 
     // Set simulation attributes
-    const float objects_spawn_delay = 0.01f;
+    const float objects_spawn_delay = 0.02f;
     const float objects_spawn_speed = 1200.0f;
     const sf::Vector2f objects_spawn_position = {500.0f, 200.0f};
     const float object_min_radius = 1.0f;
     const float object_max_radius = 20.0f;
-    const uint32_t max_objects_count  = 2000;
+    const uint32_t max_objects_count  = 1200;
     const float max_angle = 1.0f;
 
     solver.initilaizeGrid(24);
