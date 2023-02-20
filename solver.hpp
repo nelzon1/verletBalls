@@ -2,6 +2,7 @@
 #include "SFML/Graphics.hpp"
 #include <vector>
 #include <cmath>
+#include "grid.hpp"
 
 #include "utils/math.hpp"
 
@@ -74,7 +75,8 @@ public:
         const float step_dt = getStepDt();
         for (uint32_t i{m_sub_steps}; i--;) {
             applyGravity();
-            checkCollisions(step_dt);
+            if ( m_objects.size() < 200 ) checkCollisions(step_dt);
+            else checkCollisionsGrid(step_dt);
             applyConstraint();
             updateObjects(step_dt);
         }
@@ -99,6 +101,28 @@ public:
     void setObjectVelocity(VerletObject& object, sf::Vector2f v)
     {
         object.setVelocity(v, getStepDt());
+    }
+
+    void initilaizeGrid(uint32_t height, uint32_t width) {
+        grid = Grid(width, height);
+    }
+
+    void clearGrid() {
+        for (uint32_t i = 0; i < grid.width; ++i) {
+            for (uint32_t j = 0; j < grid.height; ++j) {
+                grid.getCell(i,j).clearObjects();
+            }
+        }
+    }
+
+    void assignObjectsToGrid() {
+        clearGrid();
+        for (uint32_t k = 0; k < m_objects.size(); ++k) {
+            VerletObject& obj = m_objects[k];
+            uint32_t x_bin = obj.position.x / 100;
+            uint32_t y_bin = obj.position.y / 100;
+            grid.getCell(x_bin,y_bin).addObject(k);
+        }
     }
 
     [[nodiscard]]
@@ -130,13 +154,15 @@ public:
     }
 
 private:
-    uint32_t   m_sub_steps  = 2;
+    uint32_t   m_sub_steps  = 1;
     sf::Vector2f   m_gravity = {0.0f, 1000.0f};
     sf::Vector2f   m_constraint_center;
     float m_constraint_radius = 100.0f;
     std::vector<VerletObject> m_objects;
     float m_time = 0.0f;
     float m_frame_dt = 0.0f;
+    Grid grid;
+    const float response_coef = 0.75f;
 
     void applyGravity()
     {
@@ -147,7 +173,6 @@ private:
 
     void checkCollisions(float dt)
     {
-        const float  response_coef = 0.75f;
         const uint64_t objects_count = m_objects.size();
         // Iterate on all objects
         for (uint64_t i{0}; i < objects_count; ++i) {
@@ -155,19 +180,73 @@ private:
             // Iterate on object involevd in new collision pairs
             for (uint64_t k{i + 1}; k < objects_count; ++k) {
                 VerletObject& object_2 = m_objects[k];
-                const sf::Vector2f v = object_1.position - object_2.position;
-                const float dist2 = v.x * v.x + v.y * v.y;
-                const float min_dist = object_1.radius + object_2.radius;
-                // Check overlap
-                if (dist2 < min_dist * min_dist) {
-                    const float  dist = sqrt(dist2);
-                    const sf::Vector2f n = v / dist;
-                    const float mass_ratio_1 = object_1.radius / (object_1.radius + object_2.radius);
-                    const float mass_ratio_2 = object_2.radius / (object_1.radius + object_2.radius);
-                    const float delta = 0.5f * response_coef * (dist - min_dist);
-                    // Update positions
-                    object_1.position -= n * (mass_ratio_2 * delta);
-                    object_2.position += n * (mass_ratio_1 * delta);
+                collide(object_1, object_2);
+            }
+        }
+    }
+
+    void collide(VerletObject& obj_1, VerletObject& obj_2){
+        const sf::Vector2f v = obj_1.position - obj_2.position;
+        const float dist2 = v.x * v.x + v.y * v.y;
+        const float min_dist = obj_1.radius + obj_2.radius;
+        // Check overlap
+        if (dist2 < min_dist * min_dist) {
+            const float  dist = sqrt(dist2);
+            const sf::Vector2f n = v / dist;
+            const float mass_ratio_1 = obj_1.radius / (obj_1.radius + obj_2.radius);
+            const float mass_ratio_2 = obj_2.radius / (obj_1.radius + obj_2.radius);
+            const float delta = 0.5f * response_coef * (dist - min_dist);
+            // Update positions
+            obj_1.position -= n * (mass_ratio_2 * delta);
+            obj_2.position += n * (mass_ratio_1 * delta);
+        }
+    }
+
+    void checkCollisionsGrid(float dt) {
+        assignObjectsToGrid();
+        // Iterate over all squares except the outside boundary layer
+        for (uint16_t x = 1; x < grid.width - 1; ++x) {
+            for (uint16_t y = 1; y < grid.height - 1; ++y) {
+                Cell& cell_1 = grid.getCell(x,y);
+                // Check the adjacent squares
+                for (int dx = -1; dx <= 1; ++dx)
+                {
+                    for (int dy = -1; dy <= 1; ++dy)
+                    {
+                        //Check 2 cells against each other
+                        Cell& cell_2 = grid.getCell(x + dx, y + dy);
+                        checkCollisionsBetweenCells(cell_1, cell_2);
+                    }
+                }
+            }
+        }
+        collideBoundaries();
+    }
+
+    void collideBoundaries() {
+        for (uint16_t x = 0; x < grid.width; x += grid.width - 1) {
+            for (uint16_t y = 0; y < grid.height; ++y) {
+                Cell& cell = grid.getCell(x,y);
+                checkCollisionsBetweenCells(cell, cell);
+            }
+        }
+        for (uint16_t y = 0; y < grid.height; y += grid.height - 1) {
+            for (uint16_t x = 0; x < grid.width; ++x) {
+                 Cell& cell = grid.getCell(x,y);
+                     checkCollisionsBetweenCells(cell, cell);
+            }
+        }
+    }
+
+    void checkCollisionsBetweenCells(Cell& cell_1, Cell& cell_2)
+    {
+        if (cell_1.cellObjects.size() == 0 || cell_2.cellObjects.size() == 0) return;
+        for ( uint16_t i = 0; i < cell_1.cellObjects.size(); ++i){
+            uint32_t id_1 = cell_1.cellObjects[i];
+            for ( uint16_t j = 0; j < cell_2.cellObjects.size(); ++j){
+                uint32_t id_2 = cell_2.cellObjects[j];
+                if (id_1 != id_2){
+                    collide(m_objects[id_1], m_objects[id_2]);
                 }
             }
         }

@@ -2,6 +2,7 @@
 #include <SFML/Graphics.hpp>
 #include "solver.hpp"
 #include "renderer.hpp"
+#include "grid.hpp"
 #include "utils/number_generator.hpp"
 #include "utils/math.hpp"
 
@@ -34,17 +35,20 @@ int32_t main(int32_t, char*[])
 
     // Solver configuration
     solver.setConstraint({static_cast<float>(window_width) * 0.5f, static_cast<float>(window_height) * 0.5f}, 450.0f);    
-    solver.setSubStepsCount(8);
+    solver.setSubStepsCount(4);
     solver.setSimulationUpdateRate(frame_rate);
+    
 
     // Set simulation attributes
-    const float objects_spawn_delay = 0.05f;
+    const float objects_spawn_delay = 0.025f;
     const float objects_spawn_speed = 1200.0f;
     const sf::Vector2f objects_spawn_position = {500.0f, 200.0f};
     const float object_min_radius = 1.0f;
     const float object_max_radius = 20.0f;
     const uint32_t max_objects_count  = 1000;
     const float max_angle = 1.0f;
+
+    solver.initilaizeGrid(10, 10);
 
     sf::Clock clock;
     sf::Clock frameClock;
@@ -66,6 +70,7 @@ int32_t main(int32_t, char*[])
             object.color = getRainbow(t);
         }
 
+        //solver.assignObjectsToGrid();
         solver.update();
         window.clear(sf::Color::White);
         renderer.render(solver);
